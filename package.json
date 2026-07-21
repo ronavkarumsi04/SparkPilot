@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "description": "SparkPilot — free, local-first AI study notes with BYOK for every major LLM provider. Turn any lecture, PDF, or video into notes, flashcards, quizzes, and a study chat.",
-  "author": "SparkPilot contributors",
+  "author": "Ronav Karumsi",
   "license": "AGPL-3.0-or-later",
   "main": "electron/main.mjs",
   "engines": {
