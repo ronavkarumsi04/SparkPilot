@@ -16,5 +16,5 @@ const { url } = await startServer({
   port,
 });
 
-console.log(`NitroAI server running at ${url}`);
+console.log(`SparkPilot server running at ${url}`);
 console.log("Open that URL in your browser, or run the desktop shell with `npm run app`.");

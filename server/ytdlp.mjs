@@ -31,7 +31,7 @@ export async function ensureYtdlp(dir) {
   const bin = path.join(dir, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
   if (fs.existsSync(bin)) return bin;
   const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${ytdlpAsset()}`;
-  const res = await fetch(url, { headers: { "user-agent": "NitroAI" } });
+  const res = await fetch(url, { headers: { "user-agent": "SparkPilot" } });
   if (!res.ok) throw new Error(`Couldn't download yt-dlp (${res.status})`);
   fs.writeFileSync(bin, Buffer.from(await res.arrayBuffer()));
   if (process.platform !== "win32") fs.chmodSync(bin, 0o755);
@@ -78,7 +78,7 @@ async function runYtdlp(bin, args) {
 export async function extractYoutube(url, binDir) {
   const bin = await ensureYtdlp(binDir);
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), `nitroai-yt-${createHash("sha1").update(url).digest("hex").slice(0, 8)}-`),
+    path.join(os.tmpdir(), `sparkpilot-yt-${createHash("sha1").update(url).digest("hex").slice(0, 8)}-`),
   );
   const outTmpl = path.join(dir, "%(id)s.%(ext)s");
   try {

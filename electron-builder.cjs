@@ -28,9 +28,9 @@ const canNotarize =
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
-  appId: "com.nitroai.app",
-  productName: "NitroAI",
-  copyright: "NitroAI contributors",
+  appId: "com.sparkpilot.app",
+  productName: "SparkPilot",
+  copyright: "SparkPilot contributors",
   // Publishing is handled by the release workflow, not electron-builder.
   publish: null,
   files: ["dist/**", "server/**", "electron/**", "!**/*.map"],
@@ -41,7 +41,7 @@ module.exports = {
   mac: {
     target: [{ target: "dmg", arch: ["arm64", "x64"] }],
     category: "public.app-category.education",
-    artifactName: "NitroAI-mac-${arch}.${ext}",
+    artifactName: "SparkPilot-mac-${arch}.${ext}",
     // With a real cert: let electron-builder discover it from CSC_LINK and
     // apply the hardened runtime (required for notarization). Without one:
     // identity:null so electron-builder skips, and afterPack ad-hoc signs.
@@ -54,10 +54,10 @@ module.exports = {
     // (passed by the release workflow).
     notarize: canNotarize,
   },
-  dmg: { title: "NitroAI ${version}" },
+  dmg: { title: "SparkPilot ${version}" },
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
-    artifactName: "NitroAI-Setup-Windows.${ext}",
+    artifactName: "SparkPilot-Setup-Windows.${ext}",
     // Windows Authenticode signing activates automatically when these are set.
     // (WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD — see README.)
   },

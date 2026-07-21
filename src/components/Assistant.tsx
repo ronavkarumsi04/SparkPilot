@@ -111,7 +111,7 @@ export default function Assistant({
       {variant === "hero" && !hasConversation ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-8">
           <div className="text-center">
-            <h1 className="font-display text-5xl font-bold">Hey, I'm Nitro</h1>
+            <h1 className="font-display text-5xl font-bold">Hey, I am SparkPilot</h1>
             <p className="mt-3 text-lg text-ink-dim">
               Ask me anything about the source material.
             </p>
@@ -123,7 +123,7 @@ export default function Assistant({
       ) : variant === "panel" && !hasConversation ? (
         <>
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
-            <h2 className="font-display text-3xl font-bold">Hey, I'm Nitro</h2>
+            <h2 className="font-display text-3xl font-bold">Hey, I am SparkPilot</h2>
             <p className="text-ink-dim">
               I can work with you on your doc and answer any questions!
             </p>
@@ -180,7 +180,7 @@ function Bubble({ turn }: { turn: ChatTurn }) {
   }
   return (
     <div
-      className="prose-nitro max-w-none text-sm leading-relaxed text-ink"
+      className="prose-sp max-w-none text-sm leading-relaxed text-ink"
       dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.content) }}
     />
   );

@@ -19,7 +19,7 @@ import type { Block, BlockType } from "../lib/types";
 
 /* Custom block editor: click a block to edit its Markdown source; blur to render.
    Typing "/" at the start of a block opens the slash command menu — Turbo's
-   editor has no slash menu, so this is a NitroAI differentiator. */
+   editor has no slash menu, so this is a SparkPilot differentiator. */
 
 const SLASH_ITEMS: { type: BlockType; label: string; icon: typeof TextIcon }[] = [
   { type: "paragraph", label: "Text", icon: TextIcon },

@@ -1,5 +1,20 @@
-/* OpenAI implementation of the Engine interface. Cloud mode, provider "openai".
-   Uses the OpenAI REST API directly via `fetch` — no SDK dependency. */
+/* OpenAI-compatible engine adapter.
+ *
+ * Talks the OpenAI REST API dialect that many third-party hosts expose:
+ *   - NVIDIA NIM        (integrate.api.nvidia.com)
+ *   - OpenRouter        (openrouter.ai)
+ *   - Fireworks AI      (api.fireworks.ai)
+ *   - Novita AI         (api.novita.ai)
+ *   - Hugging Face       (endpoints.huggingface.co)
+ *   - z.ai              (api.z.ai)
+ *   - any self-hosted vLLM / LM Studio / TGI exposing /v1
+ *
+ * Also backs native OpenAI (api.openai.com). The differences between hosts
+ * are entirely in base URL, auth header, model id, and which optional
+ * features (structured output, TTS, transcription, embeddings) are
+ * available — all handled via constructor flags.
+ *
+ * No SDK dependency. Uses fetch directly. */
 
 import type {
   ChatMessage,
@@ -13,20 +28,63 @@ import type {
   TtsOptions,
 } from "./types";
 import { EngineError } from "./types";
+import type { ProviderId } from "../types";
 
-const BASE_URL = "https://api.openai.com/v1";
+interface OpenAICompatOptions {
+  provider: ProviderId;
+  apiKey: string;
+  baseUrl: string;
+  modelOverride?: string;
+  /* Which capabilities this host actually exposes. OpenAI's first-party API
+     has everything; most compat hosts expose only chat (+ sometimes
+     embeddings / structured output). */
+  capabilities?: Partial<EngineCapabilities>;
+  /* Default model when no override is supplied (used as a "fast" tier,
+     with the strong tier falling back to the same model). */
+  defaultModel: string;
+  /* Optional stronger-tier model. If set, `tier: "strong"` uses this
+     instead of defaultModel. Native OpenAI uses this to split
+     gpt-4o-mini (fast) / gpt-4o (strong); compat hosts leave it unset. */
+  strongModel?: string;
+  /* Some hosts (OpenRouter) accept extra headers for ranking/attribution. */
+  extraHeaders?: Record<string, string>;
+  /* OpenAI exposes structured output natively (json_schema strict). Most
+     compat hosts don't — they have to be prompted for JSON. */
+  structuredMode?: "json_schema" | "json_prompt";
+}
 
-export class OpenAIEngine implements Engine {
+export class OpenAICompatEngine implements Engine {
   readonly mode = "cloud" as const;
-  readonly provider = "openai" as const;
+  readonly provider: ProviderId;
 
-  constructor(
-    private readonly apiKey: string,
-    private readonly modelOverride?: string,
-  ) {}
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+  private readonly modelOverride?: string;
+  private readonly defaultModel: string;
+  private readonly strongModel?: string;
+  private readonly caps: EngineCapabilities;
+  private readonly structuredMode: "json_schema" | "json_prompt";
+  private readonly extraHeaders: Record<string, string>;
+
+  constructor(opts: OpenAICompatOptions) {
+    this.provider = opts.provider;
+    this.apiKey = opts.apiKey;
+    this.baseUrl = opts.baseUrl.replace(/\/$/, "");
+    this.modelOverride = opts.modelOverride;
+    this.defaultModel = opts.defaultModel;
+    this.strongModel = opts.strongModel;
+    this.caps = {
+      chat: true,
+      transcription: opts.capabilities?.transcription ?? false,
+      tts: opts.capabilities?.tts ?? false,
+      embeddings: opts.capabilities?.embeddings ?? false,
+    };
+    this.structuredMode = opts.structuredMode ?? "json_prompt";
+    this.extraHeaders = opts.extraHeaders ?? {};
+  }
 
   capabilities(): EngineCapabilities {
-    return { chat: true, transcription: true, tts: true, embeddings: true };
+    return this.caps;
   }
 
   async complete(opts: CompletionOptions, onToken?: TokenHandler): Promise<string> {
@@ -38,7 +96,7 @@ export class OpenAIEngine implements Engine {
       ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
     }, opts.signal);
 
-    if (!res.body) throw new EngineError("OpenAI returned an empty stream.", "unknown");
+    if (!res.body) throw new EngineError(`${this.provider} returned an empty stream.`, "unknown");
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -71,27 +129,59 @@ export class OpenAIEngine implements Engine {
   }
 
   async structured<T>(opts: StructuredOptions<T>): Promise<T> {
+    if (this.structuredMode === "json_schema") {
+      const res = await this.post("/chat/completions", {
+        model: this.resolveModel(opts.tier),
+        messages: buildMessages(opts),
+        stream: false,
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: opts.schemaName, schema: opts.schema, strict: true },
+        },
+      }, opts.signal);
+
+      const json = await res.json();
+      const content = json.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        throw new EngineError(`${this.provider} returned no structured content.`, "unknown");
+      }
+      return JSON.parse(content) as T;
+    }
+
+    /* JSON-prompt fallback for compat hosts without json_schema. */
+    const schemaInstruction =
+      `Respond ONLY with a single JSON object that satisfies this JSON Schema ` +
+      `(no prose, no markdown fences, no explanation):\n${JSON.stringify(opts.schema)}`;
+    const system = opts.system ? `${opts.system}\n\n${schemaInstruction}` : schemaInstruction;
+    const messages = [
+      { role: "system", content: system },
+      ...(opts.messages as ChatMessage[])
+        .filter((m) => m.role !== "system")
+        .map((m) => ({ role: m.role, content: m.content })),
+    ];
     const res = await this.post("/chat/completions", {
       model: this.resolveModel(opts.tier),
-      messages: buildMessages(opts),
+      messages,
       stream: false,
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: opts.schemaName, schema: opts.schema, strict: true },
-      },
+      response_format: { type: "json_object" },
     }, opts.signal);
 
     const json = await res.json();
     const content = json.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
-      throw new EngineError("OpenAI returned no structured content.", "unknown");
+      throw new EngineError(`${this.provider} returned no structured content.`, "unknown");
     }
     return JSON.parse(content) as T;
   }
 
   async transcribe(audio: Blob, signal?: AbortSignal): Promise<TranscriptResult> {
+    if (!this.caps.transcription) {
+      throw new EngineError(`${this.provider} does not support transcription.`, "unsupported");
+    }
     const form = new FormData();
     form.append("file", audio, "audio.webm");
     form.append("model", "whisper-1");
@@ -99,7 +189,7 @@ export class OpenAIEngine implements Engine {
 
     let res: Response;
     try {
-      res = await fetch(`${BASE_URL}/audio/transcriptions`, {
+      res = await fetch(`${this.baseUrl}/audio/transcriptions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.apiKey}` },
         body: form,
@@ -108,7 +198,7 @@ export class OpenAIEngine implements Engine {
     } catch (err) {
       throw toNetworkError(err);
     }
-    if (!res.ok) throw await mapError(res);
+    if (!res.ok) throw await mapError(res, this.provider);
 
     const json = await res.json();
     const segments: TranscriptSegment[] = Array.isArray(json.segments)
@@ -122,11 +212,9 @@ export class OpenAIEngine implements Engine {
   }
 
   async tts(text: string, opts: TtsOptions): Promise<Blob> {
-    /* Try TTS models newest→oldest, falling through ONLY when a model is
-       inaccessible to this key/project (needs verification or isn't in the
-       project's model limits). Any other failure — auth, quota, network,
-       bad input — rethrows immediately since retrying a different model
-       won't help. */
+    if (!this.caps.tts) {
+      throw new EngineError(`${this.provider} does not support text-to-speech.`, "unsupported");
+    }
     const models = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"];
     const tried: string[] = [];
     for (const model of models) {
@@ -150,18 +238,16 @@ export class OpenAIEngine implements Engine {
         throw e;
       }
     }
-    /* Every candidate was inaccessible — name them all so the user knows
-       exactly which models to enable, not just the last one attempted. */
     throw new EngineError(
-      `Your OpenAI project can't access any text-to-speech model (tried ${tried.join(
-        ", ",
-      )}). Enable one at platform.openai.com → Settings → Project → Limits, ` +
-        `and if your account is new you may also need to verify your organization there.`,
+      `${this.provider} can't access any TTS model (tried ${tried.join(", ")}).`,
       "model_missing",
     );
   }
 
   async embed(texts: string[], signal?: AbortSignal): Promise<number[][]> {
+    if (!this.caps.embeddings) {
+      throw new EngineError(`${this.provider} does not support embeddings.`, "unsupported");
+    }
     const res = await this.post("/embeddings", {
       model: "text-embedding-3-small",
       input: texts,
@@ -173,31 +259,35 @@ export class OpenAIEngine implements Engine {
   async validate(): Promise<void> {
     let res: Response;
     try {
-      res = await fetch(`${BASE_URL}/models`, { method: "GET", headers: this.headers() });
+      res = await fetch(`${this.baseUrl}/models`, {
+        method: "GET",
+        headers: this.headers(),
+      });
     } catch (err) {
       throw toNetworkError(err);
     }
-    if (res.status === 401) throw new EngineError("Invalid OpenAI API key.", "auth");
-    if (!res.ok) throw await mapError(res);
+    if (res.status === 401) throw new EngineError(`Invalid ${this.provider} API key.`, "auth");
+    if (!res.ok) throw await mapError(res, this.provider);
   }
 
   private resolveModel(tier?: "fast" | "strong"): string {
     if (this.modelOverride) return this.modelOverride;
-    return tier === "strong" ? "gpt-4o" : "gpt-4o-mini";
+    if (tier === "strong" && this.strongModel) return this.strongModel;
+    return this.defaultModel;
   }
 
   private headers(): Record<string, string> {
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${this.apiKey}`,
+      ...this.extraHeaders,
     };
   }
 
-  /* Shared POST helper: sends JSON, handles network failure + non-2xx mapping. */
   private async post(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     let res: Response;
     try {
-      res = await fetch(`${BASE_URL}${path}`, {
+      res = await fetch(`${this.baseUrl}${path}`, {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify(body),
@@ -206,7 +296,7 @@ export class OpenAIEngine implements Engine {
     } catch (err) {
       throw toNetworkError(err);
     }
-    if (!res.ok) throw await mapError(res);
+    if (!res.ok) throw await mapError(res, this.provider);
     return res;
   }
 }
@@ -220,16 +310,14 @@ function buildMessages(opts: CompletionOptions): Array<{ role: string; content: 
   return out;
 }
 
-/* User-initiated cancellation should surface as a native AbortError, not get
-   reinterpreted as a network failure. */
 function toNetworkError(err: unknown): EngineError {
   if (err instanceof Error && err.name === "AbortError") throw err;
   const message = err instanceof Error ? err.message : "Network request failed.";
   return new EngineError(message, "network");
 }
 
-async function mapError(res: Response): Promise<EngineError> {
-  let message = res.statusText || "OpenAI request failed.";
+async function mapError(res: Response, provider: string): Promise<EngineError> {
+  let message = res.statusText || `${provider} request failed.`;
   let code: string | undefined;
   let type: string | undefined;
   try {
@@ -240,23 +328,14 @@ async function mapError(res: Response): Promise<EngineError> {
   } catch {
     /* body wasn't JSON */
   }
-  /* OpenAI returns HTTP 429 for both rate limits and quota exhaustion — check
-     the error code first so quota errors aren't misreported as rate_limit. */
   if (code === "insufficient_quota" || type === "insufficient_quota") {
     return new EngineError(message, "quota");
   }
-  /* Project-scoped keys can be missing access to specific models (e.g. TTS).
-     Surface that as a clear, actionable message rather than a raw API error. */
   if (
     code === "model_not_found" ||
-    /does not have access to model|model_not_found|must be verified to use the model/i.test(
-      message,
-    )
+    /does not have access to model|model_not_found|must be verified to use the model/i.test(message)
   ) {
-    return new EngineError(
-      `${message} — enable this model for your OpenAI project at platform.openai.com → Settings → Project → Limits.`,
-      "model_missing",
-    );
+    return new EngineError(`${message} — check that this model is available on ${provider}.`, "model_missing");
   }
   if (res.status === 401) return new EngineError(message, "auth");
   if (res.status === 429) return new EngineError(message, "rate_limit");

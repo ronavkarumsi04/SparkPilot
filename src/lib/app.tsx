@@ -1,6 +1,6 @@
-/* App-wide context: opens the local database once, builds the active engine from
-   prefs + stored key, and exposes both to every page. A `version` counter lets
-   pages cheaply refresh their data after writes. */
+/* App-wide context: opens the local database once, builds the active engine
+   from prefs + stored provider config, and exposes both to every page. A
+   `version` counter lets pages cheaply refresh their data after writes. */
 
 import {
   createContext,
@@ -17,7 +17,8 @@ import { memoryStore } from "./db/memory";
 import { createEngine } from "./engine";
 import type { Engine } from "./engine/types";
 import { resilient } from "./engine/resilient";
-import { detectProvider, loadApiKey } from "./engine/keys";
+import { getProvider } from "./engine/providers";
+import { loadProviderConfig } from "./engine/keys";
 import { getEnginePrefs, saveEnginePrefs } from "./prefs";
 import type { EnginePrefs } from "./types";
 import { reconcileJobs } from "./generation/pipeline";
@@ -36,24 +37,35 @@ export function getRepo(): Promise<Repo> {
   return repoPromise;
 }
 
-/* Build the engine described by prefs. Returns null if not configured (no mode
-   picked, or cloud mode without a valid key). */
+/* Build the engine described by prefs. Returns null if not configured (no
+   mode picked, or cloud mode without a saved provider config / key). */
 export async function buildEngine(
   prefs: EnginePrefs = getEnginePrefs(),
 ): Promise<Engine | null> {
   if (!prefs.mode) return null;
   if (prefs.mode === "local") {
-    return resilient(createEngine({ mode: "local", model: prefs.localModel || undefined }));
+    const localCfg = prefs.providers.local;
+    return resilient(
+      createEngine({
+        mode: "local",
+        model: localCfg?.model || undefined,
+        localBaseUrl: localCfg?.baseUrl || undefined,
+      }),
+    );
   }
-  const key = await loadApiKey();
-  const provider = detectProvider(key);
-  if (!provider) return null;
+  /* Cloud mode: need an active provider with a saved key. */
+  const providerId = prefs.activeProvider;
+  if (!providerId) return null;
+  const cfg = await loadProviderConfig(providerId);
+  if (!cfg?.apiKey) return null;
+  const meta = getProvider(providerId);
   return resilient(
     createEngine({
       mode: "cloud",
-      provider,
-      apiKey: key,
-      model: prefs.cloudModel || undefined,
+      provider: providerId,
+      apiKey: cfg.apiKey,
+      model: cfg.model || undefined,
+      baseUrl: cfg.baseUrl || meta.baseUrl,
     }),
   );
 }

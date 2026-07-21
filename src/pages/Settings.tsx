@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Camera,
   CheckCircle2,
   Copy,
   Cpu,
@@ -8,65 +7,93 @@ import {
   KeyRound,
   Pencil,
   Settings as SettingsIcon,
+  Sparkles,
 } from "lucide-react";
 import { useApp } from "../lib/app";
-import {
-  clearApiKey,
-  detectProvider,
-  loadApiKey,
-  saveApiKey,
-} from "../lib/engine/keys";
+import { saveProviderConfig, loadProviderConfig, clearProviderConfig } from "../lib/engine/keys";
 import { createEngine } from "../lib/engine";
+import { CLOUD_PROVIDERS, getProvider } from "../lib/engine/providers";
 import { localSetupStatus } from "../lib/localSetup";
 import LocalSetupModal from "../components/LocalSetupModal";
 import { exportMarkdown, downloadText } from "../lib/export";
-import type { EngineMode } from "../lib/types";
+import type { ProviderId } from "../lib/types";
 
 const DATA_FOLDER =
   typeof navigator !== "undefined" && navigator.platform.startsWith("Win")
-    ? "%APPDATA%\\NitroAI"
-    : "~/Library/Application Support/NitroAI";
+    ? "%APPDATA%\\SparkPilot"
+    : "~/Library/Application Support/SparkPilot";
 
 export default function Settings() {
   const { prefs, savePrefs, repo } = useApp();
-  const [key, setKey] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("");
   const [exportMsg, setExportMsg] = useState("");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [msg, setMsg] = useState("");
   const [localSetup, setLocalSetup] = useState(false);
-  const provider = detectProvider(key.trim());
 
+  /* Load the active provider's stored config whenever the user switches. */
   useEffect(() => {
-    loadApiKey().then(setKey);
-  }, []);
+    if (!prefs.activeProvider) return;
+    if (prefs.activeProvider === "local") {
+      const local = prefs.providers.local;
+      setBaseUrl(local?.baseUrl || "http://localhost:11434");
+      setModel(local?.model || "qwen2.5:3b");
+      setApiKey("");
+      return;
+    }
+    loadProviderConfig(prefs.activeProvider).then((cfg) => {
+      const meta = getProvider(prefs.activeProvider!);
+      setApiKey(cfg?.apiKey ?? "");
+      setBaseUrl(cfg?.baseUrl || meta.baseUrl);
+      setModel(cfg?.model || meta.defaultModel || "");
+    });
+  }, [prefs.activeProvider, prefs.providers.local]);
 
-  function setMode(mode: EngineMode) {
+  function setMode(mode: "local" | "cloud") {
     if (mode === "local") {
-      // Switching to local provisions Ollama the same way onboarding does —
-      // install/start/pull as needed — before the engine is used.
       void localSetupStatus().then((s) => {
         const ready = s?.serving && s.hasChatModel && s.hasEmbedModel;
         if (s && !ready) {
           setLocalSetup(true);
           return;
         }
-        savePrefs({ ...prefs, mode });
+        savePrefs({ ...prefs, mode, activeProvider: "local" });
       });
       return;
     }
-    savePrefs({ ...prefs, mode });
+    /* Switch to cloud: pick the first cloud provider with a saved key, or
+       fall back to OpenAI. */
+    const firstSaved =
+      CLOUD_PROVIDERS.find((p) => prefs.providers[p.id]?.apiKey)?.id ?? "openai";
+    savePrefs({ ...prefs, mode, activeProvider: firstSaved });
+  }
+
+  function pickCloudProvider(p: ProviderId) {
+    savePrefs({ ...prefs, mode: "cloud", activeProvider: p });
   }
 
   async function saveKey() {
+    if (!prefs.activeProvider || prefs.activeProvider === "local") return;
     setStatus("saving");
     setMsg("");
+    const meta = getProvider(prefs.activeProvider);
     try {
-      const p = detectProvider(key.trim());
-      if (!p) throw new Error("Key must start with sk- (OpenAI) or sk-ant- (Anthropic).");
-      await createEngine({ mode: "cloud", provider: p, apiKey: key.trim() }).validate();
-      await saveApiKey(key.trim());
+      const engine = createEngine({
+        mode: "cloud",
+        provider: prefs.activeProvider,
+        apiKey: apiKey.trim(),
+        baseUrl: baseUrl.trim() || meta.baseUrl,
+        model: model.trim() || undefined,
+      });
+      await engine.validate();
+      await saveProviderConfig({
+        provider: prefs.activeProvider,
+        apiKey: apiKey.trim(),
+        baseUrl: meta.editableBaseUrl ? baseUrl.trim() || undefined : undefined,
+        model: model.trim() || undefined,
+      });
       savePrefs({ ...prefs, mode: "cloud" });
       setStatus("saved");
       setTimeout(() => setStatus("idle"), 2500);
@@ -75,6 +102,19 @@ export default function Settings() {
       setMsg(e instanceof Error ? e.message : "Could not validate the key.");
     }
   }
+
+  async function removeKey() {
+    if (!prefs.activeProvider) return;
+    await clearProviderConfig(prefs.activeProvider);
+    setApiKey("");
+    setStatus("idle");
+  }
+
+  const inCloudMode = prefs.mode === "cloud";
+  const activeMeta =
+    prefs.activeProvider && prefs.activeProvider !== "local"
+      ? getProvider(prefs.activeProvider)
+      : null;
 
   return (
     <div className="px-10 py-8">
@@ -86,18 +126,10 @@ export default function Settings() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[380px_1fr]">
         <div className="overflow-hidden rounded-card border border-edge bg-card shadow-soft">
-          <div className="h-24 bg-accent-soft" />
+          <div className="h-24 bg-accent-softer" />
           <div className="-mt-10 flex flex-col items-center px-6 pb-6">
-            <div className="relative">
-              <div className="flex size-20 items-center justify-center rounded-full border-4 border-card bg-accent-softer font-display text-2xl font-bold text-accent">
-                N
-              </div>
-              <button
-                className="absolute -bottom-1 -left-1 rounded-full border border-edge bg-card p-1.5 text-ink-dim shadow-soft hover:text-ink"
-                aria-label="Change avatar"
-              >
-                <Camera className="size-3.5" />
-              </button>
+            <div className="flex size-20 items-center justify-center rounded-full border-4 border-card bg-accent-softer font-display text-2xl font-bold text-accent">
+              <Sparkles className="size-8" />
             </div>
             <div className="mt-3 flex items-center gap-2">
               <span className="font-display text-xl font-bold">You</span>
@@ -123,8 +155,8 @@ export default function Settings() {
                   AI Engine
                 </h2>
                 <p className="mt-1 text-sm text-ink-faint">
-                  Run everything locally for free, or bring your own API key for
-                  cloud-quality output.
+                  Run everything locally for free, or bring your own key for
+                  cloud-quality output from any of the providers below.
                 </p>
               </div>
               <div className="flex rounded-full border border-edge bg-panel p-1">
@@ -136,7 +168,7 @@ export default function Settings() {
                 ).map(([k, label]) => (
                   <button
                     key={k}
-                    onClick={() => setMode(k as EngineMode)}
+                    onClick={() => setMode(k)}
                     className={`rounded-full px-4 py-1.5 text-sm font-semibold ${
                       prefs.mode === k ? "bg-accent text-white" : "text-ink-faint hover:text-ink"
                     }`}
@@ -147,66 +179,152 @@ export default function Settings() {
               </div>
             </div>
 
-            {prefs.mode === "cloud" ? (
-              <div className="mt-5">
-                <label className="text-sm font-semibold text-ink-dim">API key</label>
-                <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-edge bg-panel px-3 py-2.5">
-                  <KeyRound className="size-4 text-ink-faint" />
-                  <input
-                    type="password"
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    placeholder="sk-... (OpenAI) or sk-ant-... (Anthropic) — auto-detected"
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-ink-faint"
-                  />
-                  {provider && (
-                    <span className="shrink-0 rounded-full bg-accent-softer px-2.5 py-1 text-xs font-bold text-accent">
-                      {provider === "anthropic" ? "Anthropic" : "OpenAI"}
-                    </span>
-                  )}
+            {inCloudMode ? (
+              <div className="mt-5 space-y-4">
+                {/* Provider picker grid */}
+                <div>
+                  <label className="text-sm font-semibold text-ink-dim">Provider</label>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2 md:grid-cols-3">
+                    {CLOUD_PROVIDERS.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => pickCloudProvider(p.id)}
+                        className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition ${
+                          prefs.activeProvider === p.id
+                            ? "border-accent bg-accent-softer text-accent"
+                            : "border-edge bg-panel hover:bg-card-hover"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={saveKey}
-                    disabled={status === "saving"}
-                    className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-white hover:bg-accent-hover disabled:opacity-60"
-                  >
-                    {status === "saving" ? "Validating…" : "Save & validate"}
-                  </button>
-                  {status === "saved" && (
-                    <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
-                      <CheckCircle2 className="size-4" /> Saved
-                    </span>
-                  )}
-                  {key && (
-                    <button
-                      onClick={async () => {
-                        await clearApiKey();
-                        setKey("");
-                      }}
-                      className="text-sm font-semibold text-ink-faint hover:text-danger-ink"
-                    >
-                      Remove key
-                    </button>
-                  )}
-                </div>
-                {status === "error" && (
-                  <p className="mt-2 text-xs font-semibold text-danger-ink">{msg}</p>
+
+                {activeMeta && (
+                  <>
+                    <div>
+                      <label className="text-sm font-semibold text-ink-dim">
+                        {activeMeta.label} API key
+                      </label>
+                      <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-edge bg-panel px-3 py-2.5">
+                        <KeyRound className="size-4 text-ink-faint" />
+                        <input
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder={activeMeta.keyPlaceholder || "Paste your key…"}
+                          className="w-full bg-transparent text-sm outline-none placeholder:text-ink-faint"
+                        />
+                        {activeMeta.keyUrl && (
+                          <a
+                            href={activeMeta.keyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="shrink-0 text-xs font-semibold text-accent underline"
+                          >
+                            Get key
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    {activeMeta.editableBaseUrl && (
+                      <div>
+                        <label className="text-sm font-semibold text-ink-dim">Base URL</label>
+                        <input
+                          value={baseUrl}
+                          onChange={(e) => setBaseUrl(e.target.value)}
+                          placeholder={activeMeta.baseUrl}
+                          className="mt-1.5 w-full rounded-xl border border-edge bg-panel px-3 py-2.5 text-sm outline-none placeholder:text-ink-faint"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-sm font-semibold text-ink-dim">
+                        Model <span className="text-ink-faint">(optional)</span>
+                      </label>
+                      <input
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        placeholder={activeMeta.defaultModel || "Provider default"}
+                        className="mt-1.5 w-full rounded-xl border border-edge bg-panel px-3 py-2.5 text-sm outline-none placeholder:text-ink-faint"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={saveKey}
+                        disabled={status === "saving"}
+                        className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-white hover:bg-accent-hover disabled:opacity-60"
+                      >
+                        {status === "saving" ? "Validating…" : "Save & validate"}
+                      </button>
+                      {status === "saved" && (
+                        <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
+                          <CheckCircle2 className="size-4" /> Saved
+                        </span>
+                      )}
+                      {apiKey && (
+                        <button
+                          onClick={removeKey}
+                          className="text-sm font-semibold text-ink-faint hover:text-danger-ink"
+                        >
+                          Remove key
+                        </button>
+                      )}
+                    </div>
+                    {status === "error" && (
+                      <p className="text-xs font-semibold text-danger-ink">{msg}</p>
+                    )}
+                    <p className="text-xs text-ink-faint">
+                      Stored in your system keychain, never in app files. One key
+                      powers every feature for this provider.
+                    </p>
+                  </>
                 )}
-                <p className="mt-2 text-xs text-ink-faint">
-                  Stored in your system keychain, never in app files. One key powers
-                  every feature.
-                </p>
               </div>
             ) : (
               <div className="mt-5 rounded-xl border border-edge bg-panel p-4">
                 <p className="text-sm font-semibold">Local models</p>
                 <p className="mt-1 text-sm text-ink-faint">
                   Speech-to-text, note generation, podcast voices, and search run on
-                  this device via a local runtime (Ollama for text; Whisper &amp;
+                  this device via a local runtime (Ollama for text; Whisper &
                   Kokoro for audio). Start Ollama, or switch to a cloud key for the
                   audio features.
                 </p>
+                {prefs.activeProvider === "local" && (
+                  <div className="mt-3 space-y-2">
+                    <label className="text-xs font-semibold text-ink-dim">Base URL</label>
+                    <input
+                      value={baseUrl}
+                      onChange={(e) => {
+                        setBaseUrl(e.target.value);
+                        savePrefs({
+                          ...prefs,
+                          providers: {
+                            ...prefs.providers,
+                            local: { provider: "local", apiKey: "", baseUrl: e.target.value, model },
+                          },
+                        });
+                      }}
+                      className="w-full rounded-xl border border-edge bg-card px-3 py-2 text-sm outline-none"
+                    />
+                    <label className="text-xs font-semibold text-ink-dim">Model</label>
+                    <input
+                      value={model}
+                      onChange={(e) => {
+                        setModel(e.target.value);
+                        savePrefs({
+                          ...prefs,
+                          providers: {
+                            ...prefs.providers,
+                            local: { provider: "local", apiKey: "", baseUrl, model: e.target.value },
+                          },
+                        });
+                      }}
+                      className="w-full rounded-xl border border-edge bg-card px-3 py-2 text-sm outline-none"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -217,7 +335,7 @@ export default function Settings() {
               Your data
             </h2>
             <p className="mt-1 text-sm text-ink-faint">
-              NitroAI is free and open source (AGPL-3.0). Your notes are yours —
+              SparkPilot is free and open source (AGPL-3.0). Your notes are yours —
               export any single note as Markdown, PDF, or Word from its menu, or
               export everything at once here. Nothing is ever locked behind a paywall.
             </p>
@@ -230,7 +348,7 @@ export default function Settings() {
                     return;
                   }
                   const all = notes.map((n) => exportMarkdown(n)).join("\n\n---\n\n");
-                  downloadText("nitroai-notes.md", all, "text/markdown");
+                  downloadText("sparkpilot-notes.md", all, "text/markdown");
                   setExportMsg(`Exported ${notes.length} note${notes.length > 1 ? "s" : ""}.`);
                 }}
                 className="rounded-xl border border-edge bg-panel px-4 py-2 text-sm font-semibold shadow-soft hover:bg-card-hover"
@@ -247,7 +365,7 @@ export default function Settings() {
         <LocalSetupModal
           onDone={() => {
             setLocalSetup(false);
-            savePrefs({ ...prefs, mode: "local" });
+            savePrefs({ ...prefs, mode: "local", activeProvider: "local" });
           }}
           onCancel={() => setLocalSetup(false)}
         />

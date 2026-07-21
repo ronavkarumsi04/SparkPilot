@@ -72,7 +72,7 @@ async function handleApi(req, res, url, opts) {
   const p = url.pathname;
 
   if (p === "/api/health") {
-    return sendJson(res, 200, { ok: true, service: "nitroai" });
+    return sendJson(res, 200, { ok: true, service: "sparkpilot" });
   }
 
   if (p === "/api/youtube-extract") {

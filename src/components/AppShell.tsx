@@ -5,8 +5,8 @@ import {
   ChevronsRight,
   Home,
   Palette,
-  PenLine,
   Settings as SettingsIcon,
+  Sparkles,
 } from "lucide-react";
 import { toggleTheme } from "../lib/theme";
 
@@ -28,9 +28,9 @@ export default function AppShell() {
         <div className="flex items-center justify-between px-4 py-5">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <PenLine className="size-5 text-accent" />
+              <Sparkles className="size-5 text-accent" />
               <span className="font-display text-lg font-semibold tracking-tight">
-                nitro ai
+                SparkPilot
               </span>
             </div>
           )}
@@ -52,7 +52,7 @@ export default function AppShell() {
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${
                   isActive
-                    ? "bg-card-hover text-ink"
+                    ? "bg-accent-softer text-accent"
                     : "text-ink-dim hover:bg-card-hover hover:text-ink"
                 }`
               }
@@ -73,7 +73,7 @@ export default function AppShell() {
           </button>
           <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
             <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft font-display text-xs font-bold text-accent">
-              N
+              S
             </div>
             {!collapsed && <span className="truncate text-sm font-semibold">You</span>}
           </div>

@@ -54,7 +54,7 @@ jobs:
             echo "No signing certificate configured — building ad-hoc."
             exit 0
           fi
-          KEYCHAIN="$RUNNER_TEMP/nitroai-signing.keychain-db"
+          KEYCHAIN="$RUNNER_TEMP/sparkpilot-signing.keychain-db"
           KPW="$(openssl rand -base64 24)"
           security create-keychain -p "$KPW" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
@@ -92,7 +92,7 @@ jobs:
       - name: Upload installers as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nitroai-${{ matrix.os }}
+          name: sparkpilot-${{ matrix.os }}
           path: |
             release/*.dmg
             release/*.exe

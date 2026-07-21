@@ -1,9 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OpenAIEngine } from "./openai";
+import { OpenAICompatEngine } from "./openai-compat";
 import { AnthropicEngine } from "./anthropic";
 import { LocalEngine } from "./local";
 import { createEngine } from "./index";
 import { EngineError } from "./types";
+
+/* Helper: instantiate the OpenAI-compatible engine as native OpenAI
+   (the case the original test suite targeted). */
+function openaiEngine(key = "sk-test", model?: string) {
+  return new OpenAICompatEngine({
+    provider: "openai",
+    apiKey: key,
+    baseUrl: "https://api.openai.com/v1",
+    modelOverride: model,
+    defaultModel: "gpt-4o-mini",
+    capabilities: { chat: true, transcription: true, tts: true, embeddings: true },
+    strongModel: "gpt-4o",
+    structuredMode: "json_schema",
+  });
+}
 
 /* Builds a fake streaming Response whose body yields the given raw SSE/NDJSON
    chunks one at a time, mirroring how a real fetch ReadableStream arrives. */
@@ -35,7 +50,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("OpenAIEngine", () => {
+describe("OpenAICompatEngine (OpenAI)", () => {
   it("complete() streams tokens and returns concatenated text", async () => {
     const chunks = [
       `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello" } }] })}\n\n`,
@@ -45,7 +60,7 @@ describe("OpenAIEngine", () => {
     const fetchMock = mockFetch(async () => streamResponse(chunks));
     vi.stubGlobal("fetch", fetchMock);
 
-    const engine = new OpenAIEngine("sk-test");
+    const engine = openaiEngine("sk-test");
     const tokens: string[] = [];
     const text = await engine.complete(
       { messages: [{ role: "user", content: "hi" }] },
@@ -67,11 +82,11 @@ describe("OpenAIEngine", () => {
     const fetchMock = mockFetch(async () => streamResponse(["data: [DONE]\n\n"]));
     vi.stubGlobal("fetch", fetchMock);
 
-    const strong = new OpenAIEngine("sk-test");
+    const strong = openaiEngine("sk-test");
     await strong.complete({ messages: [{ role: "user", content: "hi" }], tier: "strong" });
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).model).toBe("gpt-4o");
 
-    const overridden = new OpenAIEngine("sk-test", "gpt-4o-2024-08-06");
+    const overridden = openaiEngine("sk-test", "gpt-4o-2024-08-06");
     await overridden.complete({ messages: [{ role: "user", content: "hi" }], tier: "fast" });
     expect(JSON.parse(fetchMock.mock.calls[1][1]?.body as string).model).toBe("gpt-4o-2024-08-06");
   });
@@ -83,7 +98,7 @@ describe("OpenAIEngine", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const engine = new OpenAIEngine("sk-test");
+    const engine = openaiEngine("sk-test");
     const result = await engine.structured<typeof payload>({
       messages: [{ role: "user", content: "extract the person" }],
       schema: { type: "object", properties: { name: { type: "string" }, age: { type: "number" } } },
@@ -103,7 +118,7 @@ describe("OpenAIEngine", () => {
       "fetch",
       mockFetch(async () => jsonResponse({ error: { message: "Incorrect API key" } }, 401)),
     );
-    const engine = new OpenAIEngine("sk-bad");
+    const engine = openaiEngine("sk-bad");
     await expect(engine.validate()).rejects.toMatchObject({ name: "EngineError", kind: "auth" });
   });
 
@@ -114,7 +129,7 @@ describe("OpenAIEngine", () => {
         jsonResponse({ error: { message: "You exceeded your quota", code: "insufficient_quota" } }, 429),
       ),
     );
-    const engine = new OpenAIEngine("sk-test");
+    const engine = openaiEngine("sk-test");
     await expect(
       engine.complete({ messages: [{ role: "user", content: "hi" }] }),
     ).rejects.toMatchObject({ name: "EngineError", kind: "quota" });
@@ -127,7 +142,7 @@ describe("OpenAIEngine", () => {
         throw new TypeError("Failed to fetch");
       }),
     );
-    const engine = new OpenAIEngine("sk-test");
+    const engine = openaiEngine("sk-test");
     await expect(
       engine.complete({ messages: [{ role: "user", content: "hi" }] }),
     ).rejects.toMatchObject({ name: "EngineError", kind: "network" });
@@ -278,7 +293,7 @@ describe("LocalEngine", () => {
 describe("createEngine", () => {
   it("returns the right class per mode/provider", () => {
     expect(createEngine({ mode: "cloud", provider: "openai", apiKey: "sk-x" })).toBeInstanceOf(
-      OpenAIEngine,
+      OpenAICompatEngine,
     );
     expect(
       createEngine({ mode: "cloud", provider: "anthropic", apiKey: "sk-ant-x" }),

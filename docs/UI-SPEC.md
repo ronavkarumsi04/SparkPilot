@@ -1,4 +1,4 @@
-# NitroAI UI Spec
+# SparkPilot UI Spec
 
 Layout-parity spec derived from reference screenshots in `docs/ui-reference/`
 (11 captures, July 19 2026 — **gitignored, never commit**). We replicate layout,

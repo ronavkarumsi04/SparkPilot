@@ -1,16 +1,17 @@
 import type { EnginePrefs } from "./types";
 
-/* Engine preferences persist in localStorage. The API key is NOT here — it lives
-   in the OS keychain (Tauri) or a separate localStorage slot in web mode; see
-   engine/keys.ts. `mode` is null until the user explicitly picks at onboarding. */
+/* Engine preferences persist in localStorage. Provider keys/models themselves
+   live in the keychain (see engine/keys.ts); this file keeps the *active*
+   provider id + mode + UI prefs. `mode` is null until the user explicitly
+   picks at onboarding. */
 
-const KEY = "nitroai.prefs";
+const KEY = "sparkpilot.prefs";
 
 const defaults: EnginePrefs = {
   mode: null,
   onboarded: false,
-  cloudModel: "",
-  localModel: "",
+  activeProvider: null,
+  providers: {},
   language: "English",
 };
 
@@ -18,7 +19,12 @@ export function getEnginePrefs(): EnginePrefs {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...defaults };
-    return { ...defaults, ...(JSON.parse(raw) as Partial<EnginePrefs>) };
+    const parsed = { ...defaults, ...(JSON.parse(raw) as Partial<EnginePrefs>) };
+    /* Migrate old single-key prefs: if there's no activeProvider but mode is
+       cloud, try to resolve from the deprecated loadApiKey path lazily. We
+       don't import keys here to avoid a cycle — onboarding/app.tsx handles
+       the actual migration. */
+    return parsed;
   } catch {
     return { ...defaults };
   }

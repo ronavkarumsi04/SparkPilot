@@ -1,4 +1,4 @@
-/* NitroAI domain model — shared contract for db, engine, generation, and UI.
+/* SparkPilot domain model — shared contract for db, engine, generation, and UI.
    Everything persisted lives here. IDs are uuid strings. Timestamps are epoch ms. */
 
 export type ID = string;
@@ -12,8 +12,81 @@ export type SourceKind =
   | "youtube"
   | "url";
 
+/* ---------------------------------------------------------------------------
+   Provider + engine model
+   ---------------------------------------------------------------------------
+   A "provider" is any LLM/AI backend SparkPilot can talk to. Each provider
+   has a stable id, a display label, an authentication scheme, and a default
+   base URL. The engine layer (src/lib/engine/) turns a ProviderConfig into a
+   concrete Engine instance.
+
+   Providers fall into three families:
+     - openai       — talks the OpenAI REST API directly (native).
+     - openai-compat — talks a dialect of the OpenAI REST API exposed by a
+                       third-party host (NVIDIA NIM, OpenRouter, Fireworks,
+                       NovitaAI, z.ai, HF Inference Endpoints …). Same wire
+                       shape, different base URL + key.
+     - anthropic    — talks the Anthropic Messages API directly (native).
+     - google       — talks the Google Generative Language (Gemini) API.
+     - local        — talks a local Ollama server. No key, no network.
+
+   Adding a new OpenAI-compatible host is a one-liner in the catalog
+   (src/lib/engine/providers.ts) — no new engine class required.
+   ------------------------------------------------------------------------- */
+
+export type ProviderFamily =
+  | "openai"
+  | "openai-compat"
+  | "anthropic"
+  | "google"
+  | "local";
+
+export type ProviderId =
+  | "openai"
+  | "anthropic"
+  | "google"
+  | "nvidia"
+  | "openrouter"
+  | "fireworks"
+  | "novita"
+  | "huggingface"
+  | "zai"
+  | "local";
+
+export interface ProviderMeta {
+  id: ProviderId;
+  label: string;
+  family: ProviderFamily;
+  /* Fixed base URL for native providers; suggested default for compat
+     providers (the user can override it in Settings). */
+  baseUrl: string;
+  /* Whether the user supplies an API key for this provider. Local = false. */
+  needsKey: boolean;
+  /* Placeholder shown in the key input, or null when no key is used. */
+  keyPlaceholder?: string;
+  /* Optional help link users can follow to get a key. */
+  keyUrl?: string;
+  /* Short marketing-style description for the picker card. */
+  blurb: string;
+  /* Suggested default model; empty string = let the engine pick. */
+  defaultModel?: string;
+  /* Whether a custom base URL is exposed in Settings (compat providers). */
+  editableBaseUrl?: boolean;
+}
+
 export type EngineMode = "local" | "cloud";
-export type Provider = "openai" | "anthropic";
+
+/* Persisted per-provider configuration. Exactly one is active at a time
+   (engine.prefs.activeProvider); the rest remember their key/model so
+   switching back is instant. */
+export interface ProviderConfig {
+  provider: ProviderId;
+  apiKey: string;
+  /* Overrides the provider's default base URL (compat providers only). */
+  baseUrl?: string;
+  /* Overrides the provider's default model. Empty = provider default. */
+  model?: string;
+}
 
 /* ---- Notes & content ---------------------------------------------------- */
 
@@ -177,8 +250,9 @@ export interface EnginePrefs {
   /* null until the user makes an explicit choice at onboarding — NO default. */
   mode: EngineMode | null;
   onboarded: boolean;
-  /* Per-mode model selection; empty string = provider/engine default. */
-  cloudModel?: string;
-  localModel?: string;
+  /* The active provider id (cloud mode). For local mode this is "local". */
+  activeProvider: ProviderId | null;
+  /* Per-provider saved config (key, baseUrl, model). Keyed by provider id. */
+  providers: Partial<Record<ProviderId, ProviderConfig>>;
   language: string;
 }

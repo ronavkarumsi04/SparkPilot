@@ -1,4 +1,4 @@
-/* NitroAI desktop shell.
+/* SparkPilot desktop shell.
  *
  * The app is a local web app. This shell:
  *   1. starts the local server (serves the built UI + native helpers) on launch
@@ -77,7 +77,7 @@ async function createWindow() {
     minWidth: 880,
     minHeight: 620,
     backgroundColor: "#faf7f5",
-    title: "NitroAI",
+    "title": "SparkPilot"
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

@@ -7,7 +7,7 @@ import { COLLECTIONS, type Store } from "./index";
 
 const DB_VERSION = 1;
 
-export async function idbStore(name = "nitroai"): Promise<Store> {
+export async function idbStore(name = "sparkpilot"): Promise<Store> {
   const db: IDBPDatabase = await openDB(name, DB_VERSION, {
     upgrade(database) {
       for (const collection of Object.values(COLLECTIONS)) {

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "nitroai",
+  "productName": "SparkPilot",
   "version": "0.1.0",
-  "identifier": "com.nitroai.app",
+  "identifier": "com.sparkpilot.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "nitroai",
+        "title": "SparkPilot",
         "width": 800,
         "height": 600
       }

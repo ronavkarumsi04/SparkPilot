@@ -1,4 +1,4 @@
-/* NitroAI Tauri backend. The frontend holds the app logic; the native side owns
+/* SparkPilot Tauri backend. The frontend holds the app logic; the native side owns
    the one thing the browser can't do securely: storing the BYO API key in the OS
    keychain (macOS Keychain / Windows Credential Manager / Secret Service). The
    web/dev build falls back to localStorage — see src/lib/engine/keys.ts. */
@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tauri::Manager;
 
-const SERVICE: &str = "com.nitroai.app";
+const SERVICE: &str = "com.sparkpilot.app";
 const ACCOUNT: &str = "api_key";
 
 #[tauri::command]
@@ -82,7 +82,7 @@ fn ensure_ytdlp(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         ytdlp_asset()
     );
     let bytes = reqwest::blocking::Client::builder()
-        .user_agent("NitroAI")
+        .user_agent("SparkPilot")
         .build()
         .map_err(|e| e.to_string())?
         .get(&url)
@@ -144,7 +144,7 @@ fn vtt_to_text(vtt: &str) -> String {
 #[tauri::command]
 fn youtube_extract(app: tauri::AppHandle, url: String) -> Result<YoutubeResult, String> {
     let bin = ensure_ytdlp(&app)?;
-    let dir = std::env::temp_dir().join(format!("nitroai-yt-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("sparkpilot-yt-{}", std::process::id()));
     let _ = fs::create_dir_all(&dir);
     let out_tmpl = dir.join("%(id)s.%(ext)s").to_string_lossy().to_string();
 

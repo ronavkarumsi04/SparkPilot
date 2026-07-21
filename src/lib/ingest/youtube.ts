@@ -194,7 +194,7 @@ export async function ingestYoutube(url: string): Promise<IngestResult> {
 
   throw new Error(
     "This deployment can't reach YouTube (its bot-protection blocks transcript fetches from a static site). " +
-      "Use the NitroAI desktop app or run the app locally (`npm run preview`) — both extract captions/audio " +
+      "Use the SparkPilot desktop app or run the app locally (`npm run preview`) — both extract captions/audio " +
       "automatically — or download the audio and drop it into “Record or upload audio”.",
   );
 }

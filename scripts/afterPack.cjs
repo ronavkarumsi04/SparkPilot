@@ -22,7 +22,7 @@ exports.default = async function afterPack(context) {
   // VALID ad-hoc signature rather than the broken linker signature that macOS
   // reports as "damaged". This runs before electron-builder's own signing.
 
-  const appName = context.packager.appInfo.productFilename; // "NitroAI"
+  const appName = context.packager.appInfo.productFilename; // "SparkPilot"
   const appPath = path.join(context.appOutDir, `${appName}.app`);
 
   console.log(`[afterPack] ad-hoc signing ${appPath}`);

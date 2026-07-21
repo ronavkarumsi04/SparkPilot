@@ -68,11 +68,11 @@ async function downloadBinary(binDir, onLog) {
   fs.mkdirSync(binDir, { recursive: true });
   if (process.platform !== "darwin") {
     throw new Error(
-      "Automatic Ollama setup isn't available on this platform yet. Install Ollama from https://ollama.com/download, then reopen NitroAI (or use a cloud key instead).",
+      "Automatic Ollama setup isn't available on this platform yet. Install Ollama from https://ollama.com/download, then reopen SparkPilot (or use a cloud key instead).",
     );
   }
   onLog?.("Downloading the local AI runtime (Ollama)… this is a one-time ~150 MB download.");
-  const res = await fetch(OLLAMA_DARWIN_TGZ, { headers: { "user-agent": "NitroAI" } });
+  const res = await fetch(OLLAMA_DARWIN_TGZ, { headers: { "user-agent": "SparkPilot" } });
   if (!res.ok) throw new Error(`Couldn't download Ollama (${res.status})`);
   const tgz = path.join(binDir, "ollama-darwin.tgz");
   fs.writeFileSync(tgz, Buffer.from(await res.arrayBuffer()));
@@ -126,7 +126,7 @@ async function ensureServing(bin, appOrigin, onLog) {
     serveProc = null;
   });
   if (!(await waitUntilServing())) {
-    throw new Error("Ollama started but isn't responding. Try reopening NitroAI.");
+    throw new Error("Ollama started but isn't responding. Try reopening SparkPilot.");
   }
 }
 

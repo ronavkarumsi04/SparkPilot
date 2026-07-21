@@ -1,10 +1,7 @@
 /* Anthropic implementation of the Engine interface. Cloud mode, provider
-   "anthropic". Talks to the Messages API directly via `fetch`.
-
+   "anthropic". Talks to the Messages API directly via fetch.
    Anthropic has no first-party transcription/TTS/embeddings endpoints, so
-   those three methods throw a friendly "unsupported" EngineError — callers
-   should check `capabilities()` (or use src/lib/engine/router.ts) before
-   calling them. */
+   those three methods throw a friendly "unsupported" EngineError. */
 
 import type {
   ChatMessage,
@@ -18,9 +15,8 @@ import type {
 } from "./types";
 import { EngineError } from "./types";
 
-const BASE_URL = "https://api.anthropic.com/v1";
+const DEFAULT_BASE_URL = "https://api.anthropic.com/v1";
 const API_VERSION = "2023-06-01";
-
 const UNSUPPORTED_MESSAGE =
   "Anthropic does not support this operation; use an OpenAI key or local models.";
 
@@ -28,10 +24,15 @@ export class AnthropicEngine implements Engine {
   readonly mode = "cloud" as const;
   readonly provider = "anthropic" as const;
 
-  constructor(
-    private readonly apiKey: string,
-    private readonly modelOverride?: string,
-  ) {}
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+  private readonly modelOverride?: string;
+
+  constructor(apiKey: string, modelOverride?: string, baseUrl?: string) {
+    this.apiKey = apiKey;
+    this.baseUrl = (baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.modelOverride = modelOverride;
+  }
 
   capabilities(): EngineCapabilities {
     return { chat: true, transcription: false, tts: false, embeddings: false };
@@ -125,7 +126,7 @@ export class AnthropicEngine implements Engine {
   async validate(): Promise<void> {
     let res: Response;
     try {
-      res = await fetch(`${BASE_URL}/messages`, {
+      res = await fetch(`${this.baseUrl}/messages`, {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify({
@@ -151,8 +152,6 @@ export class AnthropicEngine implements Engine {
       "Content-Type": "application/json",
       "x-api-key": this.apiKey,
       "anthropic-version": API_VERSION,
-      /* Required for the key to be usable directly from a browser/renderer
-         context (Tauri webview) instead of only from a server. */
       "anthropic-dangerous-direct-browser-access": "true",
     };
   }
@@ -160,7 +159,7 @@ export class AnthropicEngine implements Engine {
   private async post(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     let res: Response;
     try {
-      res = await fetch(`${BASE_URL}/messages`, {
+      res = await fetch(`${this.baseUrl}/messages`, {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify(body),
@@ -174,10 +173,6 @@ export class AnthropicEngine implements Engine {
   }
 }
 
-/* Anthropic keeps system instructions in a top-level `system` field (never in
-   `messages`), so any ChatMessage with role "system" is folded into it. The
-   system field is wrapped in the content-block array form so it can carry
-   cache_control — worthwhile once system + few-shot context gets long. */
 function buildSystemAndMessages(
   opts: CompletionOptions,
 ): { system: Array<{ type: "text"; text: string; cache_control: { type: "ephemeral" } }> | null; messages: Array<{ role: "user" | "assistant"; content: string }> } {

@@ -330,12 +330,12 @@ export function stripFence(md: string): string {
 export function renderMarkdown(md: string): string {
   if (typeof window === "undefined") return escapeHtml(md);
   const stash: string[] = [];
-  const keep = (html: string): string => `%%NITROMATH${stash.push(html) - 1}%%`;
+  const keep = (html: string): string => `%%SPMATH${stash.push(html) - 1}%%`;
   let src = normalizeMath(md);
   src = src.replace(MATH_BLOCK_RE, (_m, x: string) => keep(renderMath(x.trim(), true)));
   src = src.replace(MATH_INLINE_RENDER_RE, (_m, x: string) => keep(renderMath(x.trim(), false)));
   let html = marked.parse(src, { async: false }) as string;
-  html = html.replace(/%%NITROMATH(\d+)%%/g, (_m, i: string) => stash[Number(i)] ?? "");
+  html = html.replace(/%%SPMATH(\d+)%%/g, (_m, i: string) => stash[Number(i)] ?? "");
   return DOMPurify.sanitize(html, { ADD_ATTR: ["class", "style"] });
 }
 

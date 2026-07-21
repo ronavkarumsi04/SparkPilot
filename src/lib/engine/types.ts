@@ -2,7 +2,7 @@
    whisper.cpp / Kokoro) both implement this identical interface, so generation
    and UI code never branch on which one is active. */
 
-import type { Provider } from "../types";
+import type { ProviderId } from "../types";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -57,7 +57,7 @@ export interface EngineCapabilities {
 
 export interface Engine {
   readonly mode: "local" | "cloud";
-  readonly provider?: Provider;
+  readonly provider?: ProviderId;
   capabilities(): EngineCapabilities;
 
   /* Streaming free-form completion. Returns the full text; streams deltas. */

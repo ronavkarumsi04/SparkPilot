@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import AppShell from "./components/AppShell";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
@@ -14,8 +14,8 @@ export default function App() {
   if (!ready) {
     return (
       <div className="flex h-full items-center justify-center gap-2.5 bg-bg text-ink-faint">
-        <Loader2 className="size-5 animate-spin text-accent" />
-        <span className="font-display">Loading NitroAI…</span>
+        <Sparkles className="size-5 text-accent" />
+        <span className="font-display">Loading SparkPilot…</span>
       </div>
     );
   }

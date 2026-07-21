@@ -41,7 +41,7 @@ function middleware(): Connect.NextHandleFunction {
 
 export function youtubeExtractPlugin(): Plugin {
   return {
-    name: "nitroai-youtube-extract",
+    name: "sparkpilot-youtube-extract",
     configureServer(server) {
       server.middlewares.use(middleware());
     },
