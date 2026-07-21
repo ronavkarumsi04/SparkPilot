@@ -59,9 +59,9 @@ Footer: full-width "Generate Notes" CTA, disabled until input present.
 - **Editor**: top bar — document title, history icon, accent-soft "Share"
   pill, kebab. Body = block editor, placeholder "Type / for command menu"
   (Tiptap arrives M1). Right side: 420px collapsible assistant panel — expand
-  + collapse controls top; centered "Hey, I'm Nitro" + "I can work with you on
+  + collapse controls top; centered "Hey, I'm SparkPilot" + "I can work with you on
   your doc and answer any questions!"; chat input pinned under hero.
-- **Chat**: full-page hero "Hey, I'm Nitro" (48px) + "Ask me anything about
+- **Chat**: full-page hero "Hey, I'm SparkPilot" (48px) + "Ask me anything about
   the source material." + wide chat input.
 - **Chat input** (shared component): rounded-2xl card; text field with
   placeholder "Type a question here or type '@' to reference documents...";
