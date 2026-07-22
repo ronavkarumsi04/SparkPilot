@@ -13,7 +13,8 @@
  */
 
 import { app, BrowserWindow, shell } from "electron";
-import { autoUpdater } from "electron-updater";
+import pkg from "electron-updater";
+const { autoUpdater } = pkg;
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer } from "../server/httpServer.mjs";

@@ -31,8 +31,12 @@ module.exports = {
   appId: "com.sparkpilot.app",
   productName: "SparkPilot",
   copyright: "SparkPilot contributors",
-  // Publishing is handled by the release workflow, not electron-builder.
-  publish: null,
+  // Publishing to GitHub Releases so electron-updater can find updates
+    publish: {
+      provider: "github",
+      owner: "ronavkarumsi04",
+      repo: "SparkPilot",
+    },
   files: ["dist/**", "server/**", "electron/**", "!**/*.map"],
   extraMetadata: { main: "electron/main.mjs" },
   // Ad-hoc signs the mac bundle when there's no real cert (no-op otherwise).
