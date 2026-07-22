@@ -263,21 +263,24 @@ export class OpenAICompatEngine implements Engine {
          30s timeout accommodates cold starts on NIM, OpenRouter, etc. */
       let res: Response;
       try {
+        const payload = {
+          model: this.resolveModel("fast"),
+          messages: [{ role: "user", content: "." }],
+          max_tokens: 1,
+          stream: false,
+        };
+        console.debug(`[${this.provider}] validate → POST ${this.baseUrl}/chat/completions`, payload);
         res = await fetch(`${this.baseUrl}/chat/completions`, {
           method: "POST",
           headers: this.headers(),
-          body: JSON.stringify({
-            model: this.resolveModel("fast"),
-            messages: [{ role: "user", content: "." }],
-            max_tokens: 1,
-            stream: false,
-          }),
+          body: JSON.stringify(payload),
           signal: AbortSignal.timeout(30000),
         });
+        console.debug(`[${this.provider}] validate ← ${res.status} ${res.statusText}`);
       } catch (err) {
         if (err instanceof Error && err.name === "TimeoutError") {
           throw new EngineError(
-            `Validation timed out (30s). The provider may be slow to respond (cold start?). Try again, or check that the base URL is correct.`,
+            `Validation timed out (30s). The provider may be slow to respond (cold start?). Try again, or check that the base URL is correct: ${this.baseUrl}`,
             "network",
           );
         }
