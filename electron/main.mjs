@@ -77,7 +77,7 @@ async function createWindow() {
     minWidth: 880,
     minHeight: 620,
     backgroundColor: "#faf7f5",
-    "title": "SparkPilot"
+    title: "SparkPilot",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
