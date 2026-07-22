@@ -13,6 +13,7 @@
  */
 
 import { app, BrowserWindow, shell } from "electron";
+import { autoUpdater } from "electron-updater";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer } from "../server/httpServer.mjs";
@@ -30,6 +31,24 @@ let healthTimer = null;
 function binDir() {
   return path.join(app.getPath("userData"), "bin");
 }
+
+/* Configure auto-updater: check GitHub releases on startup and download updates.
+   The release workflow must publish artifacts to GitHub Releases (handled by CI). */
+autoUpdater.autoDownload = false; // we'll prompt the user before downloading
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.on("update-available", () => {
+  if (mainWindow) {
+    mainWindow.webContents.send("update-available");
+  }
+});
+autoUpdater.on("update-downloaded", () => {
+  if (mainWindow) {
+    mainWindow.webContents.send("update-downloaded");
+  }
+});
+autoUpdater.on("error", (err) => {
+  console.error("Auto-updater error:", err);
+});
 
 async function ensureServer() {
   if (serverInfo) {
@@ -95,13 +114,18 @@ async function createWindow() {
   });
 
   mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
+      mainWindow = null;
+    });
 
-  await mainWindow.loadURL(info.url);
-  startHealthWatch();
+    await mainWindow.loadURL(info.url);
+    startHealthWatch();
 
-  // If this machine was set up for local AI in a past session, restart Ollama
+    // Check for updates after window is loaded (silently on startup)
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error("Update check failed:", err);
+    });
+
+    // If this machine was set up for local AI in a past session, restart Ollama
   // now (we kill it on quit). No-op for cloud users. Non-blocking.
   void ensureServingIfProvisioned(binDir(), info.url);
 }

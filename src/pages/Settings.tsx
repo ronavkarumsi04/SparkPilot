@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
+  AlertCircle,
   CheckCircle2,
   Copy,
   Cpu,
   Download,
   KeyRound,
   Pencil,
+  RefreshCw,
   Settings as SettingsIcon,
   Sparkles,
 } from "lucide-react";
@@ -18,9 +20,21 @@ import LocalSetupModal from "../components/LocalSetupModal";
 import { exportMarkdown, downloadText } from "../lib/export";
 import type { ProviderId } from "../lib/types";
 
+/* Type for electron preload API */
+declare global {
+  interface Window {
+    electronAPI?: {
+      checkForUpdates: () => void;
+      onUpdateAvailable: (cb: () => void) => void;
+      onUpdateDownloaded: (cb: () => void) => void;
+      quitAndInstall: () => void;
+    };
+  }
+}
+
 const DATA_FOLDER =
   typeof navigator !== "undefined" && navigator.platform.startsWith("Win")
-    ? "%APPDATA%\\SparkPilot"
+    ? "%APPDATA%\\\\SparkPilot"
     : "~/Library/Application Support/SparkPilot";
 
 export default function Settings() {
@@ -32,8 +46,17 @@ export default function Settings() {
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [msg, setMsg] = useState("");
   const [localSetup, setLocalSetup] = useState(false);
+  const [updateState, setUpdateState] = useState<"idle" | "available" | "downloaded">("idle");
 
-  /* Load the active provider's stored config whenever the user switches. */
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.electronAPI) return;
+    const handleUpdateAvailable = () => setUpdateState("available");
+    const handleUpdateDownloaded = () => setUpdateState("downloaded");
+    window.electronAPI.onUpdateAvailable(handleUpdateAvailable);
+    window.electronAPI.onUpdateDownloaded(handleUpdateDownloaded);
+    window.electronAPI.checkForUpdates();
+  }, []);
+
   useEffect(() => {
     if (!prefs.activeProvider) return;
     if (prefs.activeProvider === "local") {
@@ -44,14 +67,14 @@ export default function Settings() {
       return;
     }
     loadProviderConfig(prefs.activeProvider).then((cfg) => {
-      const meta = getProvider(prefs.activeProvider!);
-      setApiKey(cfg?.apiKey ?? "");
-      setBaseUrl(cfg?.baseUrl || meta.baseUrl);
-      setModel(cfg?.model || meta.defaultModel || "");
-    });
-  }, [prefs.activeProvider, prefs.providers.local]);
+          const meta = getProvider(prefs.activeProvider!);
+          setApiKey(cfg?.apiKey ?? "");
+          setBaseUrl(cfg?.baseUrl || meta.baseUrl);
+          setModel(cfg?.model || meta.defaultModel || "");
+        });
+      }, [prefs.activeProvider, prefs.providers.local]);
 
-  function setMode(mode: "local" | "cloud") {
+        function setMode(mode: "local" | "cloud") {
     if (mode === "local") {
       void localSetupStatus().then((s) => {
         const ready = s?.serving && s.hasChatModel && s.hasEmbedModel;
@@ -63,8 +86,6 @@ export default function Settings() {
       });
       return;
     }
-    /* Switch to cloud: pick the first cloud provider with a saved key, or
-       fall back to OpenAI. */
     const firstSaved =
       CLOUD_PROVIDERS.find((p) => prefs.providers[p.id]?.apiKey)?.id ?? "openai";
     savePrefs({ ...prefs, mode, activeProvider: firstSaved });
@@ -124,6 +145,41 @@ export default function Settings() {
       </div>
       <p className="mt-1 text-lg text-ink-faint">Manage your profile, engine, and preferences</p>
 
+      {updateState !== "idle" && (
+        <div className="mt-4 rounded-xl border p-4 flex items-center gap-3 animate-slide-in">
+          {updateState === "available" && (
+            <>
+              <AlertCircle className="size-5 text-accent shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-accent">Update available</p>
+                <p className="text-sm text-ink-dim">A new version of SparkPilot is ready to download.</p>
+              </div>
+              <button
+                onClick={() => window.electronAPI?.checkForUpdates()}
+                className="rounded-lg border border-accent px-3 py-1.5 text-sm font-semibold text-accent hover:bg-accent/10"
+              >
+                Download update
+              </button>
+            </>
+          )}
+          {updateState === "downloaded" && (
+            <>
+              <RefreshCw className="size-5 text-green-600 shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-green-600">Update ready</p>
+                <p className="text-sm text-ink-dim">The update has been downloaded. Restart to apply.</p>
+              </div>
+              <button
+                onClick={() => window.electronAPI?.quitAndInstall()}
+                className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-green-700"
+              >
+                Restart now
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="mt-8 grid gap-6 lg:grid-cols-[380px_1fr]">
         <div className="overflow-hidden rounded-card border border-edge bg-card shadow-soft">
           <div className="h-24 bg-accent-softer" />
@@ -179,9 +235,43 @@ export default function Settings() {
               </div>
             </div>
 
+            {updateState !== "idle" && (
+              <div className="mt-4 p-4 rounded-xl border bg-accent-softer flex items-center gap-3">
+                {updateState === "available" && (
+                  <>
+                    <AlertCircle className="size-5 text-accent shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-accent">Update available</p>
+                      <p className="text-sm text-ink-dim">A new version of SparkPilot is ready to download.</p>
+                    </div>
+                    <button
+                      onClick={() => window.electronAPI?.checkForUpdates()}
+                      className="rounded-lg border border-accent px-3 py-1.5 text-sm font-semibold text-accent hover:bg-accent/10"
+                    >
+                      Download update
+                    </button>
+                  </>
+                )}
+                {updateState === "downloaded" && (
+                  <>
+                    <RefreshCw className="size-5 text-green-600 shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-green-600">Update ready</p>
+                      <p className="text-sm text-ink-dim">The update has been downloaded. Restart to apply.</p>
+                    </div>
+                    <button
+                      onClick={() => window.electronAPI?.quitAndInstall()}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-green-700"
+                    >
+                      Restart now
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
             {inCloudMode ? (
               <div className="mt-5 space-y-4">
-                {/* Provider picker grid */}
                 <div>
                   <label className="text-sm font-semibold text-ink-dim">Provider</label>
                   <div className="mt-1.5 grid grid-cols-2 gap-2 md:grid-cols-3">
