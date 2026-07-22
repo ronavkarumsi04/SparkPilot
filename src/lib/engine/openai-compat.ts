@@ -257,11 +257,20 @@ export class OpenAICompatEngine implements Engine {
   }
 
   async validate(): Promise<void> {
+    /* Use a minimal chat completion (max_tokens=1) instead of GET /models,
+       since many OpenAI-compatible providers don't expose a models list
+       endpoint. A single token is effectively free on every provider. */
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/models`, {
-        method: "GET",
+      res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
         headers: this.headers(),
+        body: JSON.stringify({
+          model: this.resolveModel("fast"),
+          messages: [{ role: "user", content: "." }],
+          max_tokens: 1,
+          stream: false,
+        }),
       });
     } catch (err) {
       throw toNetworkError(err);
