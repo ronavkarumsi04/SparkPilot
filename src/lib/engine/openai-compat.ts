@@ -271,6 +271,7 @@ export class OpenAICompatEngine implements Engine {
           max_tokens: 1,
           stream: false,
         }),
+        signal: AbortSignal.timeout(10000),
       });
     } catch (err) {
       throw toNetworkError(err);
