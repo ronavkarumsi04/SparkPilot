@@ -257,28 +257,35 @@ export class OpenAICompatEngine implements Engine {
   }
 
   async validate(): Promise<void> {
-    /* Use a minimal chat completion (max_tokens=1) instead of GET /models,
-       since many OpenAI-compatible providers don't expose a models list
-       endpoint. A single token is effectively free on every provider. */
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({
-          model: this.resolveModel("fast"),
-          messages: [{ role: "user", content: "." }],
-          max_tokens: 1,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-    } catch (err) {
-      throw toNetworkError(err);
+      /* Use a minimal chat completion (max_tokens=1) instead of GET /models,
+         since many OpenAI-compatible providers don't expose a models list
+         endpoint. A single token is effectively free on every provider.
+         30s timeout accommodates cold starts on NIM, OpenRouter, etc. */
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({
+            model: this.resolveModel("fast"),
+            messages: [{ role: "user", content: "." }],
+            max_tokens: 1,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === "TimeoutError") {
+          throw new EngineError(
+            `Validation timed out (30s). The provider may be slow to respond (cold start?). Try again, or check that the base URL is correct.`,
+            "network",
+          );
+        }
+        throw toNetworkError(err);
+      }
+      if (res.status === 401) throw new EngineError(`Invalid ${this.provider} API key.`, "auth");
+      if (!res.ok) throw await mapError(res, this.provider);
     }
-    if (res.status === 401) throw new EngineError(`Invalid ${this.provider} API key.`, "auth");
-    if (!res.ok) throw await mapError(res, this.provider);
-  }
 
   private resolveModel(tier?: "fast" | "strong"): string {
     if (this.modelOverride) return this.modelOverride;

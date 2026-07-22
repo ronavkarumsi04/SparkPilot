@@ -122,17 +122,19 @@ export class GoogleEngine implements Engine {
   }
 
   async validate(): Promise<void> {
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/v1beta/models?key=${encodeURIComponent(this.apiKey)}`);
-    } catch (err) {
-      throw toNetworkError(err);
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}/v1beta/models?key=${encodeURIComponent(this.apiKey)}`, {
+          signal: AbortSignal.timeout(10000),
+        });
+      } catch (err) {
+        throw toNetworkError(err);
+      }
+      if (res.status === 403 || res.status === 401) {
+        throw new EngineError("Invalid Gemini API key.", "auth");
+      }
+      if (!res.ok) throw await mapError(res);
     }
-    if (res.status === 403 || res.status === 401) {
-      throw new EngineError("Invalid Gemini API key.", "auth");
-    }
-    if (!res.ok) throw await mapError(res);
-  }
 
   private resolveModel(_tier?: "fast" | "strong"): string {
     if (this.modelOverride) return this.modelOverride;
